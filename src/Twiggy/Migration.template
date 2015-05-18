@@ -1,0 +1,22 @@
+<?php
+
+class Migration_%id% extends \Twiggy\Migration
+{
+    protected $description = '%description%';
+    protected $author = '%author%';
+    protected $ticket = '%ticket%';
+    protected $transactional = true;
+    protected $dependencies = [];
+
+
+    public function apply()
+    {
+
+    }
+
+
+    public function rollback()
+    {
+
+    }
+}
