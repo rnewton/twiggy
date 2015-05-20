@@ -1,8 +1,8 @@
 <?php
 
-namespace Twiggy\Exception
+namespace Twiggy\Exception;
 
-class MissingMigrationDirectoryException extends Exception
+class MissingMigrationDirectoryException extends \Exception
 {
     public function __construct($expected)
     {

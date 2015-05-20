@@ -1,8 +1,8 @@
 <?php
 
-namespace Twiggy\Exception
+namespace Twiggy\Exception;
 
-class IrreversibleMigrationException extends Exception
+class IrreversibleMigrationException extends \Exception
 {
     public function __construct($message = 'This migration cannot be rolled back.')
     {

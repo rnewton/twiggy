@@ -1,8 +1,8 @@
 <?php
 
-namespace Twiggy\Exception
+namespace Twiggy\Exception;
 
-class MissingConfigurationKeyException extends Exception
+class MissingConfigurationKeyException extends \Exception
 {
     public function __construct($key)
     {

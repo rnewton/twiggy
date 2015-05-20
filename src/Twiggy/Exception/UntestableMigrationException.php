@@ -1,8 +1,8 @@
 <?php
 
-namespace Twiggy\Exception
+namespace Twiggy\Exception;
 
-class UntestableMigrationException extends Exception
+class UntestableMigrationException extends \Exception
 {
     public function __construct(Migration $migration)
     {

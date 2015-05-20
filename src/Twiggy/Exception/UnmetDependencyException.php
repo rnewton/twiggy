@@ -1,8 +1,8 @@
 <?php
 
-namespace Twiggy\Exception
+namespace Twiggy\Exception;
 
-class UnmetDependencyException extends Exception
+class UnmetDependencyException extends \Exception
 {
     public function __construct($id)
     {

@@ -1,8 +1,9 @@
 <?php 
 
-namespace Twiggy
+namespace Twiggy;
 
-use \Twiggy\Exception;
+use \Twiggy\Exception\IrreversibleMigrationException;
+
 use \Nette\Database\Connection;
 
 abstract class Migration
@@ -63,7 +64,7 @@ abstract class Migration
         // Set defaults
         $this->setDescription($description);
         $this->setAuthor($author);
-        $this->setTicket($ticket;) 
+        $this->setTicket($ticket); 
         $this->setTransactional($transactional);
         $this->setDependencies($dependencies);
         $this->setRunDate($runDate);
@@ -253,7 +254,9 @@ abstract class Migration
     {
         // We don't want to end up with "now" if the migration is unran
         if (!is_string($runDate)) {
-            $this->runDate = new DateTime($runDate);
+            $this->runDate = new \DateTime($runDate);
+        } else {
+            $this->runDate = $runDate;
         }
     }
 

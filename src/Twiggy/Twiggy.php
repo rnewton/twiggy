@@ -2,6 +2,12 @@
 
 namespace Twiggy;
 
+use \Twiggy\Exception\MissingMigrationDirectoryException;
+use \Twiggy\Exception\UntestableMigrationException;
+use \Twiggy\Exception\MissingMigrationException;
+use \Twiggy\Exception\UnmetDependencyException;
+use \Twiggy\Exception\MissingMigrationTableException;
+
 use \Nette\Database\Connection;
 use \Symfony\Component\Filesystem\Filesystem;
 use \Symfony\Component\Filesystem\Exception\IOExceptionInterface;
@@ -14,7 +20,7 @@ class Twiggy
     private $db;
 
     /**
-     * @var TwiggyConfiguration
+     * @var Configuration
      */
     private $config;
 
@@ -27,18 +33,25 @@ class Twiggy
     /**
      * Creates the Twiggy Migration manager.
      * 
-     * @param TwiggyConfiguration $config 
+     * @param Configuration $config 
      */
-    public function __construct(TwiggyConfiguration $config)
+    public function __construct(Configuration $config)
     {
         $this->db = new Connection(
-            $config[TwiggyConfiguration::DATABASE_DSN], 
-            $config[TwiggyConfiguration::DATABASE_USER],
-            $config[TwiggyConfiguration::DATABASE_PASSWORD], 
-            $config[TwiggyConfiguration::DATABASE_OPTIONS]
+            $config[Configuration::DATABASE_DSN], 
+            $config[Configuration::DATABASE_USER],
+            $config[Configuration::DATABASE_PASSWORD], 
+            $config[Configuration::DATABASE_OPTIONS]
         );
 
         $this->config = $config;
+
+        // Make sure the database is setup for twiggy
+        try {
+            $this->checkTwiggySetup();
+        } catch (MissingMigrationTableException $e) {
+            $this->setup();
+        }
 
         // Scan for migrations in local filesystem and connected database
         $this->loadFromDatabase();
@@ -47,12 +60,23 @@ class Twiggy
 
 
     /**
+     * Sets up Twiggy's database so that we can use it normally. 
+     *
+     */
+    private function setup()
+    {
+        $rootMigration = $this->loadFromFile('00000000_000000');
+        $this->apply($rootMigration);
+    }
+
+
+    /**
      * Loads migrations from the database records.
      *
      */
-    public function loadFromDatabase()
+    private function loadFromDatabase()
     {
-        $results = $this->db->query('SELECT id FROM ?', [$this->config[TwiggyConfiguration::MIGRATION_TABLE_KEY]]);
+        $results = $this->db->query('SELECT id FROM ' . $this->config[Configuration::MIGRATION_TABLE]);
         foreach ($results as $row) {
             $this->migrations[$row['id']] = $this->loadFromFile($row['id']);
         }
@@ -63,17 +87,17 @@ class Twiggy
      * Loads migrations from the filesystem.
      *
      */
-    public function loadFromFiles()
+    private function loadFromFiles()
     {
         $fs = new Filesystem();
-        $path = $this->config[TwiggyConfiguration::MIGRATION_DIRECTORY];
+        $path = $this->config[Configuration::MIGRATION_DIRECTORY];
 
         if (!$fs->exists($path)) {
             throw new MissingMigrationDirectoryException();
         }
 
         foreach (new \DirectoryIterator($path) as $file) {
-            if (!$file->isDot() && preg_match($this->config[TwiggyConfiguration::MIGRATION_ID_FORMAT, $file->getFilename(), $matches)) {
+            if (!$file->isDot() && preg_match($this->config[Configuration::MIGRATION_ID_FORMAT], $file->getFilename(), $matches)) {
                 $classname = 'Migration_' . $matches[0];
 
                 require_once($file->getFilename());
@@ -89,8 +113,9 @@ class Twiggy
      * @param  string $id
      * @return Migration
      */
-    public function loadFromFile($id)
+    private function loadFromFile($id)
     {
+        $fs = new Filesystem();
         $fileinfo = $this->getMigrationFileInfo($id);
 
         if (!$fs->exists($fileinfo['filepath'])) {
@@ -98,18 +123,21 @@ class Twiggy
         } else {
             require_once($fileinfo['filepath']);
 
-            $migration = new $classname($this->db, $id);
+            $migration = new $fileinfo['classname']($this->db, $id);
         }
 
         return $migration;
     }
 
     /**
-     * Returns the list of migrations
+     * Returns all migrations matching the specified parameters.
+     *
+     * @param string $params
      * @return Migration[]
      */
-    public function list()
+    public function getAll(array $params)
     {
+        // TODO
         return $this->migrations;
     }
 
@@ -129,7 +157,7 @@ class Twiggy
         $migration->apply();
 
         if ($migration->isTransactional()) {
-            $migration->commit();
+            $migration->commitTransaction();
         }
 
         $this->mark($migration);
@@ -152,6 +180,8 @@ class Twiggy
         if ($migration->isTransactional()) {
             $migration->commit();
         }
+
+        $this->unmark($migration);
     }
 
 
@@ -182,7 +212,34 @@ class Twiggy
      */
     public function mark(Migration $migration)
     {
-        $migration->setRunDate(new DateTime());
+        $date = new \DateTime();
+        $runDate = $date->format('Y-m-d H:i:s');
+
+        // Update the database
+        $this->db->query(
+            "UPDATE {$this->config[Configuration::MIGRATION_TABLE]} SET run_date = ? WHERE id = ?", 
+            $runDate,
+            $migration->getId()
+        );
+
+        $migration->setRunDate($runDate);
+    }
+
+
+    /**
+     * Unmarks a migration as run without actually rolling it back.
+     * 
+     * @param  Migration $migration
+     */
+    public function unmark(Migration $migration)
+    {
+        // Update the database
+        $this->db->query(
+            "UPDATE {$this->config[Configuration::MIGRATION_TABLE]} SET run_date = NULL WHERE id = ?", 
+            $migration->getId()
+        );
+
+        $migration->setRunDate(null);
     }
 
 
@@ -195,7 +252,8 @@ class Twiggy
      */
     public function create($description = 'Data migration', $author = '', $ticket = '')
     {
-        $id = new \DateTime()->format('Ymd_His');
+        $date = new \DateTime();
+        $id = $date->format('Ymd_His');
 
         $fileinfo = $this->getMigrationFileInfo($id);
 
@@ -236,7 +294,7 @@ class Twiggy
     private function getMigrationFileInfo($id)
     {
         $fs = new Filesystem();
-        $path = $this->config[TwiggyConfiguration::MIGRATION_DIRECTORY];
+        $path = $this->config[Configuration::MIGRATION_DIRECTORY];
 
         if (!$fs->exists($path)) {
             throw new MissingMigrationDirectoryException();
@@ -263,7 +321,7 @@ class Twiggy
      */
     private function checkMigrationDependencies(Migration $migration)
     {
-        foreach ($migration->dependencies as $dependency) {
+        foreach ($migration->getDependencies() as $dependency) {
             if (!isset($this->migrations[$dependency])) {
                 throw new MissingMigrationException();
             }
@@ -271,6 +329,20 @@ class Twiggy
             if (!$this->migrations[$dependency]->isApplied()) {
                 throw new UnmetDependencyException($dependency);
             }
+        }
+    }
+
+
+    /**
+     * Checks that twiggy has been setup for use.
+     *
+     * @throws MissingMigrationTableException
+     */
+    private function checkTwiggySetup()
+    {
+        $tables = $this->db->getSupplementalDriver()->getTables();
+        if (!in_array($this->config[Configuration::MIGRATION_TABLE], $tables)) {
+            throw new MissingMigrationTableException();
         }
     }
 }
