@@ -2,15 +2,17 @@
 
 namespace Twiggy;
 
-use \Twiggy\Exception\MissingMigrationDirectoryException;
-use \Twiggy\Exception\UntestableMigrationException;
-use \Twiggy\Exception\MissingMigrationException;
-use \Twiggy\Exception\UnmetDependencyException;
-use \Twiggy\Exception\MissingMigrationTableException;
+use Twiggy\Exception\MissingMigrationDirectoryException;
+use Twiggy\Exception\UntestableMigrationException;
+use Twiggy\Exception\MissingMigrationException;
+use Twiggy\Exception\UnmetDependencyException;
+use Twiggy\Exception\MissingMigrationTableException;
+use Twiggy\Exception\MigrationNotFoundException;
 
-use \Nette\Database\Connection;
-use \Symfony\Component\Filesystem\Filesystem;
-use \Symfony\Component\Filesystem\Exception\IOExceptionInterface;
+use Nette\Database\Connection;
+use Symfony\Component\Filesystem\Filesystem;
+use Symfony\Component\Filesystem\Exception\IOExceptionInterface;
+
 
 class Twiggy
 {
@@ -76,9 +78,10 @@ class Twiggy
      */
     private function loadFromDatabase()
     {
-        $results = $this->db->query('SELECT id FROM ' . $this->config[Configuration::MIGRATION_TABLE]);
+        $results = $this->db->query("SELECT id, run_date FROM {$this->config[Configuration::MIGRATION_TABLE]} ORDER BY id DESC");
         foreach ($results as $row) {
             $this->migrations[$row['id']] = $this->loadFromFile($row['id']);
+            $this->migrations[$row['id']]->setRunDate($row['run_date']);
         }
     }
 
@@ -93,15 +96,25 @@ class Twiggy
         $path = $this->config[Configuration::MIGRATION_DIRECTORY];
 
         if (!$fs->exists($path)) {
-            throw new MissingMigrationDirectoryException();
+            throw new MissingMigrationDirectoryException($path);
         }
 
         foreach (new \DirectoryIterator($path) as $file) {
-            if (!$file->isDot() && preg_match($this->config[Configuration::MIGRATION_ID_FORMAT], $file->getFilename(), $matches)) {
-                $classname = 'Migration_' . $matches[0];
+            // Grab all files that match the ID format
+            if (
+                !$file->isDot() && 
+                preg_match($this->config[Configuration::MIGRATION_ID_FORMAT], $file->getFilename(), $matches)
+            ) {
+                // Check if anything unknown to the database shows up
+                if (!isset($this->migrations[$matches[0]])) {
+                    // Create database record
+                    $this->db->query("INSERT INTO {$this->config[Configuration::MIGRATION_TABLE]} (id) VALUES (?)", $matches[0]);
 
-                require_once($file->getFilename());
-                $this->migrations[$matches[0]] = new $classname($this->db, $matches[0]);
+                    // Load
+                    $classname = 'Migration_' . $matches[0];
+                    require_once($file->getPathname());
+                    $this->migrations[$matches[0]] = new $classname($this->db, $matches[0]);
+                }
             }
         }
     }
@@ -129,6 +142,24 @@ class Twiggy
         return $migration;
     }
 
+
+    /**
+     * Returns a single migration, by ID. 
+     * 
+     * @param  string $id
+     * @return Migration
+     * @throws MigrationNotFoundException
+     */
+    public function get($id)
+    {
+        if (isset($this->migrations[$id])) {
+            return $this->migrations[$id];
+        }
+
+        throw new MigrationNotFoundException($id);
+    }
+
+
     /**
      * Returns all migrations matching the specified parameters.
      *
@@ -137,8 +168,135 @@ class Twiggy
      */
     public function getAll(array $params)
     {
-        // TODO
-        return $this->migrations;
+        $resultSet = $this->migrations;
+
+        // Search on id
+        if (isset($params['id'])) {
+            $resultSet = $this->filterId($resultSet, $params['id']);
+        }
+
+        // Search on ticket
+        if (isset($params['ticket'])) {
+            $resultSet = $this->filterTicket($resultSet, $params['ticket']);
+        }
+
+        // Search on author
+        if (isset($params['author'])) {
+            $resultSet = $this->filterAuthor($resultSet, $params['author']);
+        }
+
+        // Filter by run date
+        if (isset($params['ran'])) {
+            $resultSet = $this->filterRan($resultSet, $params['ran']);
+        }
+
+        // Search on description
+        if (isset($params['description'])) {
+            $resultSet = $this->filterDescription($resultSet, $params['description']);
+        }
+
+        return $resultSet;
+    }
+
+
+    /**
+     * Filters the given set of migrations by ID with the given value.
+     * 
+     * @param  Migration[] $migrations
+     * @param  string      $filterValue
+     * @return Migration[]
+     */
+    private function filterId($migrations, $filterValue)
+    {
+        foreach ($migrations as $index => &$migration) {
+            if (false === (strpos($migration->getId(), $filterValue))) {
+                unset($migrations[$index]);
+            }
+        }
+
+        return $migrations;
+    }
+
+
+    /**
+     * Filters the given set of migrations by ticket with the given value.
+     * 
+     * @param  Migration[] $migrations
+     * @param  string      $filterValue
+     * @return Migration[]
+     */
+    private function filterTicket($migrations, $filterValue)
+    {
+        foreach ($migrations as $index => &$migration) {
+            if (false === (strpos($migration->getTicket(), $filterValue))) {
+                unset($migrations[$index]);
+            }
+        }
+
+        return $migrations;
+    }
+
+
+    /**
+     * Filters the given set of migrations by author with the given value.
+     * 
+     * @param  Migration[] $migrations
+     * @param  string      $filterValue
+     * @return Migration[]
+     */
+    private function filterAuthor($migrations, $filterValue)
+    {
+        foreach ($migrations as $index => &$migration) {
+            if (false === (strpos($migration->getAuthor(), $filterValue))) {
+                unset($migrations[$index]);
+            }
+        }
+
+        return $migrations;
+    }
+
+
+    /**
+     * Filters the given set of migrations by run date. Options are "ran", "unran" and "all".
+     * 
+     * @param  Migration[] $migrations
+     * @param  string      $filterValue
+     * @return Migration[]
+     */
+    private function filterRan($migrations, $filterValue)
+    {
+        if ('all' == $filterValue) {
+            return $migrations; // Nothing to do
+        }
+
+        foreach ($migrations as $index => &$migration) {
+            if ('unran' == $filterValue && $migration->isApplied()) {
+                unset($migrations[$index]);
+            } else if ('ran' == $filterValue && !$migration->isApplied()) {
+                unset($migrations[$index]);
+            }
+        }
+
+        return $migrations;
+    }
+
+
+    /**
+     * Filters the given set of migrations by description with the given value.
+     * 
+     * @param  Migration[] $migrations
+     * @param  string      $filterValue
+     * @return Migration[]
+     */
+    private function filterDescription($migrations, $filterValue)
+    {
+        foreach ($migrations as $index => &$migration) {
+            if (false === (strpos($migration->getDescription(), $filterValue))) {
+                unset($migrations[$index]);
+            }
+        }
+
+        return $migrations;
     }
 
 
@@ -178,7 +336,7 @@ class Twiggy
         $migration->rollback();
 
         if ($migration->isTransactional()) {
-            $migration->commit();
+            $migration->commitTransaction();
         }
 
         $this->unmark($migration);
@@ -195,7 +353,7 @@ class Twiggy
         if ($migration->isTransactional()) {
             $migration->beginTransaction();
         } else {
-            throw new UntestableMigrationException($migration);
+            throw new UntestableMigrationException($migration->getId());
         }
 
         $this->checkMigrationDependencies($migration);
@@ -231,7 +389,7 @@ class Twiggy
      * 
      * @param  Migration $migration
      */
-    public function unmark(Migration $migration)
+    private function unmark(Migration $migration)
     {
         // Update the database
         $this->db->query(
@@ -249,21 +407,26 @@ class Twiggy
      * @param  string $description
      * @param  string $author
      * @param  string $ticket
+     * @return string ID of the newly created migration
      */
-    public function create($description = 'Data migration', $author = '', $ticket = '')
+    public function create($description = 'Data migration', $ticket = '', $author = '')
     {
         $date = new \DateTime();
         $id = $date->format('Ymd_His');
 
-        $fileinfo = $this->getMigrationFileInfo($id);
+        // Create database entry
+        $this->db->query("INSERT INTO {$this->config[Configuration::MIGRATION_TABLE]} (id) VALUES (?)", $id);
 
-        $template = file_get_contents('./Migration.template');
+        // Create migration file
+        $fileinfo = $this->getMigrationFileInfo($id);
+        $template = file_get_contents($this->config[Configuration::MIGRATION_DIRECTORY] . '/Migration.template');
         $migration = str_replace(['%id%', '%description%', '%author%', '%ticket%'], [$id, $description, $author, $ticket], $template);
 
+        // Load new migration
         file_put_contents($fileinfo['filepath'], $migration);
+        $this->migrations[$id] = $this->loadFromFile($id);
 
-        require_once($fileinfo['filepath']);
-        $this->migrations[$id] = new $classname($this->db, $id);
+        return $id;
     }
 
 
@@ -272,15 +435,23 @@ class Twiggy
      * 
      * @param  Migration $migration
      */
-    public function remove(Migration $migration)
+    public function remove(Migration $migration, $rollback = true)
     {
-        if ($migration->isApplied()) {
+        if ($migration->isApplied() && $rollback) {
             $this->rollback($migration);
         }
 
         $fileinfo = $this->getMigrationFileInfo($migration->getId());
 
-        unlink($fileinfo['filepath']);
+        // Delete the file
+        if (!is_a($migration, 'Twiggy\MissingMigration')) {
+            unlink($fileinfo['filepath']);
+        }
+
+        // Delete the database record
+        $this->db->query("DELETE FROM {$this->config[Configuration::MIGRATION_TABLE]} WHERE id = ?", $migration->getId());
+
+        // Remove the object from memory
         unset($this->migrations[$migration->getId()]);
     }
 
@@ -297,7 +468,7 @@ class Twiggy
         $path = $this->config[Configuration::MIGRATION_DIRECTORY];
 
         if (!$fs->exists($path)) {
-            throw new MissingMigrationDirectoryException();
+            throw new MissingMigrationDirectoryException($path);
         }
 
         $classname = "Migration_$id";
@@ -341,8 +512,12 @@ class Twiggy
     private function checkTwiggySetup()
     {
         $tables = $this->db->getSupplementalDriver()->getTables();
-        if (!in_array($this->config[Configuration::MIGRATION_TABLE], $tables)) {
-            throw new MissingMigrationTableException();
+        foreach ($tables as $table) {
+            if ($this->config[Configuration::MIGRATION_TABLE] == $table['name']) {
+                return;
+            }
         }
+
+        throw new MissingMigrationTableException();
     }
 }

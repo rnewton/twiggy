@@ -1,8 +1,8 @@
 <?php
 
-namespace Twiggy
+namespace Twiggy;
 
-use \Twiggy\Exception;
+use Twiggy\Exception;
 
 class MissingMigration extends Migration
 {

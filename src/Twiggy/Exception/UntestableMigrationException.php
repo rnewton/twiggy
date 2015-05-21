@@ -4,8 +4,8 @@ namespace Twiggy\Exception;
 
 class UntestableMigrationException extends \Exception
 {
-    public function __construct(Migration $migration)
+    public function __construct($id)
     {
-        parent::__construct('Migration ' . $migration->getId() . ' is not testable.');
+        parent::__construct("Migration $id is not testable.");
     }
 }

@@ -56,18 +56,10 @@ abstract class Migration
     protected $runDate;
 
 
-    public function __construct(Connection $db, $id, $description = '', $author = '', $ticket = '', $transactional = true, array $dependencies = array(), $runDate = null)
+    public function __construct(Connection $db, $id)
     {
         $this->db = $db;
         $this->id = $id;
-
-        // Set defaults
-        $this->setDescription($description);
-        $this->setAuthor($author);
-        $this->setTicket($ticket); 
-        $this->setTransactional($transactional);
-        $this->setDependencies($dependencies);
-        $this->setRunDate($runDate);
     }
 
 
@@ -122,29 +114,11 @@ abstract class Migration
 
 
     /**
-     * @param \Nette\Database\Connection $db
-     */
-    private function setDb(Connection $db)
-    {
-        $this->db = $db;
-    }
-
-
-    /**
      * @return \Nette\Database\Connection
      */
     public function getDb()
     {
         return $this->db;
-    }
-
-
-    /**
-     * @param string $id
-     */
-    private function setId($id)
-    {
-        $this->id = $id;
     }
 
 
@@ -158,29 +132,11 @@ abstract class Migration
 
 
     /**
-     * @param string $description
-     */
-    private function setDescription($description)
-    {
-        $this->description = $description;
-    }
-
-
-    /**
      * @return string
      */
     public function getDescription()
     {
         return $this->description;
-    }
-
-
-    /**
-     * @param string $author
-     */
-    private function setAuthor($author)
-    {
-        $this->author = $author;
     }
 
 
@@ -194,15 +150,6 @@ abstract class Migration
 
 
     /**
-     * @param string $ticket
-     */
-    private function setTicket($ticket)
-    {
-        $this->ticket = $ticket;
-    }
-
-
-    /**
      * @return string
      */
     public function getTicket()
@@ -212,29 +159,11 @@ abstract class Migration
 
 
     /**
-     * @param bool $transactional
-     */
-    private function setTransactional($transactional)
-    {
-        $this->transactional = $transactional;
-    }
-
-
-    /**
      * @return bool
      */
     public function isTransactional()
     {
         return $this->transactional;
-    }
-
-
-    /**
-     * @param string[] $dependecies
-     */
-    private function setDependencies(array $dependencies)
-    {
-        $this->dependencies = $dependencies;
     }
 
 
@@ -253,7 +182,7 @@ abstract class Migration
     public function setRunDate($runDate)
     {
         // We don't want to end up with "now" if the migration is unran
-        if (!is_string($runDate)) {
+        if (is_string($runDate)) {
             $this->runDate = new \DateTime($runDate);
         } else {
             $this->runDate = $runDate;
@@ -275,6 +204,6 @@ abstract class Migration
      */
     public function isApplied()
     {
-        return is_null($this->runDate);
+        return !!$this->runDate;
     }
 }
