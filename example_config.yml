@@ -1,0 +1,7 @@
+db_dsn      : pdoadapter:host=localhost;port=5432;dbname=twiggy;user=postgres;password=nachos_are_so_tasty
+db_user     : not_needed_if_in_dsn
+db_password : not_needed_if_in_dsn
+db_options  : see Nette Database
+table_name  : Name for the migrations table in the database. (default is 'migrations')
+directory   : Path for the migrations directory. (default is './migrations')
+id_format   : Regex for migration IDs. (default is '/\\d{8}_\\d{6}/')

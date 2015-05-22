@@ -56,6 +56,12 @@ abstract class Migration
     protected $runDate;
 
 
+    /**
+     * Creates a new Migration instance. 
+     * 
+     * @param Connection $db
+     * @param string     $id
+     */
     public function __construct(Connection $db, $id)
     {
         $this->db = $db;

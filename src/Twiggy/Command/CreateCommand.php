@@ -58,14 +58,14 @@ class CreateCommand extends Command
             }
         }
 
-        $id = $this->getApplication()->getTwiggy()->create($description, $ticket, $author);
+        $migration = $this->getApplication()->getTwiggy()->create($description, $ticket, $author);
 
         // Show the newly created migration in the list
         $command = $this->getApplication()->find('ls');
 
         $args = [
             'command' => 'ls',
-            '--id' => $id
+            '--id' => $migration->getId()
         ];
 
         $command->run(new ArrayInput($args), $output);

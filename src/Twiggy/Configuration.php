@@ -16,9 +16,9 @@ class Configuration implements \ArrayAccess
     const DATABASE_PASSWORD = 'db_password';
     const DATABASE_OPTIONS = 'db_options';
 
-    const MIGRATION_TABLE = 'tableName';
+    const MIGRATION_TABLE = 'table_name';
     const MIGRATION_DIRECTORY = 'directory';
-    const MIGRATION_ID_FORMAT = 'idFormat';
+    const MIGRATION_ID_FORMAT = 'id_format';
 
     public static $requiredKeys = [
         self::DATABASE_DSN,

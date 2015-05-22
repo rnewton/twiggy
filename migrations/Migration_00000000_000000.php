@@ -20,7 +20,7 @@ class Migration_00000000_000000 extends \Twiggy\Migration
         ');
 
         // Insert this migration into it. This wouldn't normally be necessary, but we need it since the table doesn't exist yet. 
-        $this->db->query('INSERT INTO migrations VALUES (?, NOW())', '00000000_000000');
+        $this->db->query('INSERT INTO migrations VALUES (?, ?)', $this->getId(), date('Y-m-d H:i:s'));
     }
 
 

@@ -17,7 +17,7 @@ use Symfony\Component\Filesystem\Exception\IOExceptionInterface;
 class Twiggy
 {
     /**
-     * @var \Nette\Database\Connection
+     * @var Nette\Database\Connection
      */
     private $db;
 
@@ -407,7 +407,7 @@ class Twiggy
      * @param  string $description
      * @param  string $author
      * @param  string $ticket
-     * @return string ID of the newly created migration
+     * @return Migration
      */
     public function create($description = 'Data migration', $ticket = '', $author = '')
     {
@@ -426,7 +426,7 @@ class Twiggy
         file_put_contents($fileinfo['filepath'], $migration);
         $this->migrations[$id] = $this->loadFromFile($id);
 
-        return $id;
+        return $this->migrations[$id];
     }
 
 
